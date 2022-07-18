@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(LibPressioSperr VERSION 0.0.1)
+project(LibPressioSperr VERSION 0.0.2)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

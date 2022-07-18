@@ -13,14 +13,25 @@ namespace libpressio { namespace sperr_ns {
 
 using namespace ::C_API;
 
+  static std::map<std::string, int> const MODES{
+    {"bpp", 1},
+    {"psnr", 2},
+    {"pwe", 3},
+  };
+
 class sperr_compressor_plugin : public libpressio_compressor_plugin {
 public:
   struct pressio_options get_options_impl() const override
   {
     struct pressio_options options;
-    set(options, "sperr:qlevel", qlev);
+    set(options, "sperr:mode", mode);
+    set_type(options, "sperr:mode_str", pressio_option_charptr_type);
     set(options, "sperr:tolerance", tol);
-    set(options, "pressio:abs", tol);
+    if(mode == 3) set(options, "pressio:abs", tol);
+    else set_type(options, "pressio:abs", pressio_option_double_type);
+    set(options, "sperr:nthreads", nthreads);
+    set(options, "sperr:chunks", pressio_data(chunks.begin(), chunks.end()));
+
     return options;
   }
 
@@ -29,6 +40,14 @@ public:
     struct pressio_options options;
     set(options, "pressio:thread_safe", static_cast<int32_t>(pressio_thread_safety_multiple));
     set(options, "pressio:stability", "experimental");
+
+    std::vector<std::string> modes_vec;
+    modes_vec.reserve(3);
+    for (auto const& i : MODES) {
+      modes_vec.emplace_back(i.first);
+    }
+    set(options, "sperr:mode_str", modes_vec);
+
     return options;
   }
 
@@ -36,17 +55,40 @@ public:
   {
     struct pressio_options options;
     set(options, "pressio:description", R"(the sperr lossless compressor https://github.com/shaomeng/SPERR)");
-    set(options, "sperr:qlevel", "quantization level");
-    set(options, "sperr:tolerance", "absolute error tolerance");
+    set(options, "sperr:mode", "mode name");
+    set(options, "sperr:mode_str", "mode name");
+    set(options, "sperr:chunks", "how to chunk the data during compression -- for best performance use a large multiple of the input size");
+    set(options, "sperr:nthreads", "number of threads to use");
+    set(options, "sperr:tolerance", "value for the error bound mode");
     return options;
   }
 
 
   int set_options_impl(struct pressio_options const& options) override
   {
-    get(options, "pressio:abs", &tol);
-    get(options, "sperr:qlevel", &qlev);
+    if(get(options, "pressio:abs", &tol) == pressio_options_key_set) {
+      mode=3;
+    }
+    get(options, "sperr:quality", &tol);
+    get(options, "sperr:mode", &mode);
+    get(options, "sperr:nthreads", &nthreads);
+    {
+      std::string tmp;
+      if(get(options, "sperr:mode_name", &tmp) == pressio_options_key_set) {
+        try {
+          mode = MODES.at(tmp);
+        } catch(std::out_of_range const&) {
+          return set_error(1, "unsupported mode: " + tmp);
+        }
+      }
+    }
     get(options, "sperr:tolerance", &tol);
+    {
+      pressio_data tmp;
+      if(get(options, "sperr:chunks", &tmp) == pressio_options_key_set) {
+        chunks = tmp.to_vector<size_t>();
+      }
+    }
     return 0;
   }
 
@@ -71,10 +113,10 @@ public:
     int ec;
     switch(dims.size()) {
       case 2:
-        ec = sperr_qzcomp_2d(input->data(), is_float, dims.at(0), dims.at(1), qlev, tol, &bitstream, &stream_len);
+        ec = sperr_comp_2d(input->data(), is_float, dims.at(0), dims.at(1), mode, tol, &bitstream, &stream_len);
         break;
       case 3:
-        ec = sperr_qzcomp_3d(input->data(), is_float, dims.at(0), dims.at(1), dims.at(2), qlev, tol, &bitstream, &stream_len);
+        ec = sperr_comp_3d(input->data(), is_float, dims.at(0), dims.at(1), dims.at(2), chunks.at(0), chunks.at(1), chunks.at(2), mode, tol, nthreads, &bitstream, &stream_len);
         break;
       default:
         return set_error(2, "invalid data dims");
@@ -110,11 +152,11 @@ public:
     switch(dims.size()) {
       case 2:
         outdims.resize(2);
-        ec = sperr_qzdecomp_2d(input->data(), input->size_in_bytes(), is_float, &outdims[0], &outdims[1], &outbuf);
+        ec = sperr_decomp_2d(input->data(), input->size_in_bytes(), is_float, &outdims[0], &outdims[1], &outbuf);
         break;
       case 3:
         outdims.resize(3);
-        ec = sperr_qzdecomp_3d(input->data(), input->size_in_bytes(), is_float, &outdims[0], &outdims[1], &outdims[2], &outbuf);
+        ec = sperr_decomp_3d(input->data(), input->size_in_bytes(), is_float, nthreads, &outdims[0], &outdims[1], &outdims[2], &outbuf);
         break;
       default:
         return set_error(2, "unsupported dims");
@@ -167,8 +209,11 @@ public:
     }
   }
 
+
   double tol = 1e-6;
-  int32_t qlev = 1;
+  int32_t mode = 3;
+  uint64_t nthreads = 1;
+  std::vector<size_t> chunks = {256,256,256};
 };
 
 static pressio_register compressor_many_fields_plugin(compressor_plugins(), "sperr", []() {

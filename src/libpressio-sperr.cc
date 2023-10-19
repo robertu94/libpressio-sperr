@@ -54,11 +54,11 @@ public:
   struct pressio_options get_documentation_impl() const override
   {
     struct pressio_options options;
-    set(options, "pressio:description", R"(the sperr lossless compressor https://github.com/shaomeng/SPERR)");
+    set(options, "pressio:description", R"(the SPERR lossless compressor https://github.com/NCAR/SPERR)");
     set(options, "sperr:mode", "mode name");
     set(options, "sperr:mode_str", "mode name");
-    set(options, "sperr:chunks", "how to chunk the data during compression -- for best performance use a large multiple of the input size");
-    set(options, "sperr:nthreads", "number of threads to use");
+    set(options, "sperr:chunks", "how to chunk a 3D volume during compression");
+    set(options, "sperr:nthreads", "number of threads to use for 3D compression/decompression");
     set(options, "sperr:tolerance", "value for the error bound mode");
     return options;
   }
@@ -110,11 +110,14 @@ public:
     
     void* bitstream = NULL;
     size_t stream_len = 0;
-    int ec;
+    int ec = 0;
     switch(dims.size()) {
-      case 2:
-        ec = sperr_comp_2d(input->data(), is_float, dims.at(0), dims.at(1), mode, tol, &bitstream, &stream_len);
+      case 2: {
+        const int inc_header = 1;  // Include a header in 2D bitstreams.
+        ec = sperr_comp_2d(input->data(), is_float, dims.at(0), dims.at(1), mode, tol, 
+                           inc_header_2d, &bitstream, &stream_len);
         break;
+      }
       case 3:
         ec = sperr_comp_3d(input->data(), is_float, dims.at(0), dims.at(1), dims.at(2), chunks.at(0), chunks.at(1), chunks.at(2), mode, tol, nthreads, &bitstream, &stream_len);
         break;
@@ -148,14 +151,19 @@ public:
     int ec;
     void* outbuf = NULL; /* Will be free'd later */
     auto dims = output->normalized_dims();
-    std::vector<size_t> outdims;
+    std::vector<size_t> outdims(3);
     switch(dims.size()) {
-      case 2:
-        outdims.resize(2);
-        ec = sperr_decomp_2d(input->data(), input->size_in_bytes(), is_float, &outdims[0], &outdims[1], &outbuf);
+      case 2: {
+        const size_t header_len = 10;
+        int tmpint = 0;
+        sperr_parse_header(input->data(), &outdims[0], &outdims[1], &outdims[2], &tmpint);
+        assert(outdims[2] == 1);
+        assert(tmpint == is_float);
+        ec = sperr_decomp_2d(reinterpret_cast<const uint8_t*>(input->data()) + header_len, 
+                             input->size_in_bytes(), is_float, outdims[0], outdims[1], &outbuf);
         break;
+      }
       case 3:
-        outdims.resize(3);
         ec = sperr_decomp_3d(input->data(), input->size_in_bytes(), is_float, nthreads, &outdims[0], &outdims[1], &outdims[2], &outbuf);
         break;
       default:

@@ -115,7 +115,7 @@ public:
       case 2: {
         const int inc_header = 1;  // Include a header in 2D bitstreams.
         ec = sperr_comp_2d(input->data(), is_float, dims.at(0), dims.at(1), mode, tol, 
-                           inc_header_2d, &bitstream, &stream_len);
+                           inc_header, &bitstream, &stream_len);
         break;
       }
       case 3:

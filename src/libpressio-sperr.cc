@@ -48,6 +48,17 @@ public:
     }
     set(options, "sperr:mode_str", modes_vec);
 
+    
+
+    
+        std::vector<std::string> invalidations {"sperr:mode", "sperr:nthreads", "sperr:tolerance", "pressio:abs", "sperr:mode_str", "sperr:chunks"}; 
+        std::vector<pressio_configurable const*> invalidation_children {}; 
+        
+        set(options, "predictors:error_dependent", get_accumulate_configuration("predictors:error_dependent", invalidation_children, invalidations));
+        set(options, "predictors:error_agnostic", get_accumulate_configuration("predictors:error_agnostic", invalidation_children, invalidations));
+        set(options, "predictors:runtime", get_accumulate_configuration("predictors:runtime", invalidation_children, invalidations));
+        set(options, "pressio:highlevel", get_accumulate_configuration("pressio:highlevel", invalidation_children, std::vector<std::string>{"pressio:abs"}));
+
     return options;
   }
 
@@ -69,12 +80,11 @@ public:
     if(get(options, "pressio:abs", &tol) == pressio_options_key_set) {
       mode=3;
     }
-    get(options, "sperr:quality", &tol);
     get(options, "sperr:mode", &mode);
     get(options, "sperr:nthreads", &nthreads);
     {
       std::string tmp;
-      if(get(options, "sperr:mode_name", &tmp) == pressio_options_key_set) {
+      if(get(options, "sperr:mode_str", &tmp) == pressio_options_key_set) {
         try {
           mode = MODES.at(tmp);
         } catch(std::out_of_range const&) {

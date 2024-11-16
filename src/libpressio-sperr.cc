@@ -3,6 +3,7 @@
 #include "libpressio_ext/cpp/data.h"
 #include "libpressio_ext/cpp/options.h"
 #include "libpressio_ext/cpp/pressio.h"
+#include "libpressio_ext/cpp/domain_manager.h"
 #include "SPERR_C_API.h"
 #include <cmath>
 
@@ -102,11 +103,12 @@ public:
     return 0;
   }
 
-  int compress_impl(const pressio_data* input,
+  int compress_impl(const pressio_data* real_input,
                     struct pressio_data* output) override
   {
+      pressio_data input = domain_manager().make_readable(domain_plugins().build("malloc"), *real_input);
 		int is_float = 0;
-		switch(input->dtype()) {
+		switch(input.dtype()) {
 			case pressio_float_dtype:
 				is_float = 1;
         break;
@@ -116,7 +118,7 @@ public:
 			default:
 				return set_error(1, "unsupported datatype");
 		}
-    auto dims = input->normalized_dims();
+    auto dims = input.normalized_dims();
     
     void* bitstream = NULL;
     size_t stream_len = 0;
@@ -124,12 +126,12 @@ public:
     switch(dims.size()) {
       case 2: {
         const int inc_header = 1;  // Include a header in 2D bitstreams.
-        ec = sperr_comp_2d(input->data(), is_float, dims.at(0), dims.at(1), mode, tol, 
+        ec = sperr_comp_2d(input.data(), is_float, dims.at(0), dims.at(1), mode, tol, 
                            inc_header, &bitstream, &stream_len);
         break;
       }
       case 3:
-        ec = sperr_comp_3d(input->data(), is_float, dims.at(0), dims.at(1), dims.at(2), chunks.at(0), chunks.at(1), chunks.at(2), mode, tol, nthreads, &bitstream, &stream_len);
+        ec = sperr_comp_3d(input.data(), is_float, dims.at(0), dims.at(1), dims.at(2), chunks.at(0), chunks.at(1), chunks.at(2), mode, tol, nthreads, &bitstream, &stream_len);
         break;
       default:
         return set_error(2, "invalid data dims");
@@ -142,9 +144,10 @@ public:
     return 0;
   }
 
-  int decompress_impl(const pressio_data* input,
+  int decompress_impl(const pressio_data* real_input,
                       struct pressio_data* output) override
   {
+      pressio_data input = domain_manager().make_readable(domain_plugins().build("malloc"), *real_input);
 		int is_float = 0;
 		switch(output->dtype()) {
 			case pressio_float_dtype:
@@ -166,15 +169,15 @@ public:
       case 2: {
         const size_t header_len = 10;
         int tmpint = 0;
-        sperr_parse_header(input->data(), &outdims[0], &outdims[1], &outdims[2], &tmpint);
+        sperr_parse_header(input.data(), &outdims[0], &outdims[1], &outdims[2], &tmpint);
         assert(outdims[2] == 1);
         assert(tmpint == is_float);
-        ec = sperr_decomp_2d(reinterpret_cast<const uint8_t*>(input->data()) + header_len, 
-                             input->size_in_bytes(), is_float, outdims[0], outdims[1], &outbuf);
+        ec = sperr_decomp_2d(reinterpret_cast<const uint8_t*>(input.data()) + header_len, 
+                             input.size_in_bytes(), is_float, outdims[0], outdims[1], &outbuf);
         break;
       }
       case 3:
-        ec = sperr_decomp_3d(input->data(), input->size_in_bytes(), is_float, nthreads, &outdims[0], &outdims[1], &outdims[2], &outbuf);
+        ec = sperr_decomp_3d(input.data(), input.size_in_bytes(), is_float, nthreads, &outdims[0], &outdims[1], &outdims[2], &outbuf);
         break;
       default:
         return set_error(2, "unsupported dims");

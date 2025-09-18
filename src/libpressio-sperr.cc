@@ -7,10 +7,8 @@
 #include "SPERR_C_API.h"
 #include <cmath>
 
-extern "C" void register_libpressio_sperr() {
-}
 
-namespace libpressio { namespace sperr_ns {
+namespace libpressio { namespace compressors { namespace sperr_ns {
 
 using namespace ::C_API;
 
@@ -237,9 +235,12 @@ public:
   std::vector<size_t> chunks = {256,256,256};
 };
 
-static pressio_register compressor_many_fields_plugin(compressor_plugins(), "sperr", []() {
+static pressio_register plugin(compressor_plugins(), "sperr", []() {
   return compat::make_unique<sperr_compressor_plugin>();
 });
 
-} }
+} } }
 
+extern "C" void register_libpressio_sperr() {
+    libpressio::compressors::sperr_ns::plugin.ensure_registered();
+}

@@ -116,7 +116,12 @@ public:
 			default:
 				return set_error(1, "unsupported datatype");
 		}
-    auto dims = input.normalized_dims();
+        std::vector<size_t> dims;
+        if (input.num_dimensions() <= 2) {
+            dims = input.normalized_dims(2, 1);
+        } else {
+            dims = input.normalized_dims(3, 1);
+        }
     
     void* bitstream = NULL;
     size_t stream_len = 0;
@@ -161,7 +166,12 @@ public:
 
     int ec;
     void* outbuf = NULL; /* Will be free'd later */
-    auto dims = output->normalized_dims();
+        std::vector<size_t> dims;
+        if (output->num_dimensions() <= 2) {
+            dims = output->normalized_dims(2, 1);
+        } else {
+            dims = output->normalized_dims(3, 1);
+        }
     std::vector<size_t> outdims(3);
     switch(dims.size()) {
       case 2: {

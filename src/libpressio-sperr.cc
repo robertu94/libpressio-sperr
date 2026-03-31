@@ -29,6 +29,7 @@ public:
     if(mode == 3) set(options, "pressio:abs", tol);
     else set_type(options, "pressio:abs", pressio_option_double_type);
     set(options, "sperr:nthreads", nthreads);
+    set(options, "pressio:nthreads", static_cast<uint32_t>(nthreads));
     set(options, "sperr:chunks", pressio_data(chunks.begin(), chunks.end()));
 
     return options;
@@ -80,6 +81,10 @@ public:
       mode=3;
     }
     get(options, "sperr:mode", &mode);
+    uint32_t lp_nthread = static_cast<uint32_t>(nthreads);
+    if(get(options, "pressio:nthreads", &lp_nthread) == pressio_options_key_set) {
+        nthreads = static_cast<uint32_t>(lp_nthread);
+    }
     get(options, "sperr:nthreads", &nthreads);
     {
       std::string tmp;
